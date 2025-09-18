@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authAPI } from "@/lib/api";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
@@ -29,18 +30,49 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // TODO: 실제 로그인 API 호출
-      console.log("로그인 시도:", formData);
+      // 실제 로그인 API 호출
+      const response = await authAPI.login({
+        email: formData.email,
+        password: formData.password,
+      });
 
-      // 임시: 2초 후 대시보드로 이동
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      console.log("로그인 성공:", response);
 
       // 성공시 대시보드로 리다이렉트
       router.push("/dashboard");
-    } catch (err) {
-      setError("로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.");
+    } catch (err: any) {
+      console.log("로그인 에러:", err);
+
+      // 에러 메시지 처리
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.response?.status === 401) {
+        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      } else {
+        setError("로그인에 실패했습니다. 다시 시도해주세요.");
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 소셜 로그인 핸들러
+  const handleSocialLogin = (provider: "google" | "naver" | "kakao") => {
+    try {
+      switch (provider) {
+        case "google":
+          authAPI.googleLogin();
+          break;
+        case "naver":
+          authAPI.naverLogin();
+          break;
+        case "kakao":
+          authAPI.kakaoLogin();
+          break;
+      }
+    } catch (error) {
+      console.log(`${provider} 로그인 에러:`, error);
+      setError(`${provider} 로그인 중 오류가 발생했습니다.`);
     }
   };
 
@@ -145,7 +177,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* 소셜 로그인 (선택사항) */}
+          {/* 소셜 로그인 */}
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -157,8 +189,10 @@ export default function LoginPage() {
             </div>
 
             <div className="mt-4 space-y-2">
+              {/* Google 로그인 */}
               <button
                 type="button"
+                onClick={() => handleSocialLogin("google")}
                 className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={isLoading}
               >
@@ -181,6 +215,28 @@ export default function LoginPage() {
                   />
                 </svg>
                 Google로 로그인
+              </button>
+
+              {/* 네이버 로그인 */}
+              <button
+                type="button"
+                onClick={() => handleSocialLogin("naver")}
+                className="w-full flex items-center justify-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                disabled={isLoading}
+              >
+                <span className="mr-2 font-bold">N</span>
+                네이버로 로그인
+              </button>
+
+              {/* 카카오 로그인 */}
+              <button
+                type="button"
+                onClick={() => handleSocialLogin("kakao")}
+                className="w-full flex items-center justify-center px-4 py-2 bg-yellow-400 text-black rounded-lg hover:bg-yellow-500 transition-colors"
+                disabled={isLoading}
+              >
+                <span className="mr-2 font-bold">K</span>
+                카카오로 로그인
               </button>
             </div>
           </div>

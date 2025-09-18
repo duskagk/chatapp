@@ -3,16 +3,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authAPI } from "@/lib/api"; // API import 추가
 
 interface FormData {
-  username: string;
+  name: string;
   email: string;
   password: string;
   confirmPassword: string;
 }
 
 interface FormErrors {
-  username?: string;
+  name?: string;
   email?: string;
   password?: string;
   confirmPassword?: string;
@@ -21,7 +22,7 @@ interface FormErrors {
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState<FormData>({
-    username: "",
+    name: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -50,12 +51,12 @@ export default function RegisterPage() {
     const newErrors: FormErrors = {};
 
     // 사용자명 검증
-    if (!formData.username.trim()) {
-      newErrors.username = "사용자명을 입력해주세요";
-    } else if (formData.username.length < 2) {
-      newErrors.username = "사용자명은 2글자 이상이어야 합니다";
-    } else if (formData.username.length > 20) {
-      newErrors.username = "사용자명은 20글자 이하여야 합니다";
+    if (!formData.name.trim()) {
+      newErrors.name = "사용자명을 입력해주세요";
+    } else if (formData.name.length < 2) {
+      newErrors.name = "사용자명은 2글자 이상이어야 합니다";
+    } else if (formData.name.length > 20) {
+      newErrors.name = "사용자명은 20글자 이하여야 합니다";
     }
 
     // 이메일 검증
@@ -93,24 +94,54 @@ export default function RegisterPage() {
     setErrors({});
 
     try {
-      // TODO: 실제 회원가입 API 호출
       console.log("회원가입 시도:", {
-        username: formData.username,
+        name: formData.name,
         email: formData.email,
         password: formData.password,
       });
 
-      // 임시: 2초 후 로그인 페이지로 이동
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // 실제 회원가입 API 호출
+      const result = await authAPI.register({
+        name: formData.name, // username -> name으로 변환
+        email: formData.email,
+        password: formData.password,
+      });
+
+      console.log("회원가입 성공:", result);
 
       // 성공시 로그인 페이지로 리다이렉트
       router.push(
         "/auth/login?message=회원가입이 완료되었습니다. 로그인해주세요."
       );
-    } catch (err) {
-      setErrors({
-        general: "회원가입에 실패했습니다. 다시 시도해주세요.",
-      });
+    } catch (err: any) {
+      console.error("회원가입 에러:", err);
+
+      // 에러 메시지 처리
+      let errorMessage = "회원가입에 실패했습니다. 다시 시도해주세요.";
+
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      // 특정 에러 타입에 따른 처리
+      if (err.response?.status === 400) {
+        if (errorMessage.includes("email") || errorMessage.includes("이메일")) {
+          setErrors({ email: "이미 존재하는 이메일입니다." });
+        } else if (
+          errorMessage.includes("password") ||
+          errorMessage.includes("비밀번호")
+        ) {
+          setErrors({ password: "비밀번호 형식이 올바르지 않습니다." });
+        } else {
+          setErrors({ general: errorMessage });
+        }
+      } else {
+        setErrors({ general: errorMessage });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -135,28 +166,28 @@ export default function RegisterPage() {
             {/* 사용자명 */}
             <div>
               <label
-                htmlFor="username"
+                htmlFor="name"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
                 사용자명
               </label>
               <input
-                id="username"
-                name="username"
+                id="name"
+                name="name"
                 type="text"
                 required
-                value={formData.username}
+                value={formData.name}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                  errors.username
+                  errors.name
                     ? "border-red-300 focus:border-red-500"
                     : "border-gray-300 focus:border-blue-500"
                 }`}
                 placeholder="사용자명을 입력하세요"
                 disabled={isLoading}
               />
-              {errors.username && (
-                <p className="mt-1 text-sm text-red-600">{errors.username}</p>
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
               )}
             </div>
 

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import apiClient, { authAPI } from "@/lib/api";
+import DeleteAccountForm from "@/components/DeleteAccountForm";
+import CreateRoomModal from "@/components/CreateRoomModal";
 
 interface ChatRoom {
   id: string;
@@ -14,6 +17,15 @@ interface ChatRoom {
   isPrivate: boolean;
 }
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Friend {
   id: string;
   username: string;
@@ -22,8 +34,8 @@ interface Friend {
   lastSeen?: string;
 }
 
-// 임시 데이터
-const mockChatRooms: ChatRoom[] = [
+// 초기 임시 데이터
+const initialMockRooms: ChatRoom[] = [
   {
     id: "1",
     name: "일반",
@@ -76,15 +88,24 @@ const mockFriends: Friend[] = [
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<"rooms" | "friends">("rooms");
-  const [currentUser] = useState({
-    username: "사용자",
-    email: "user@example.com",
-  });
+  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const router = useRouter();
 
-  const handleLogout = () => {
-    // TODO: 실제 로그아웃 로직
-    router.push("/");
+  // 모달 상태
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isCreateRoomModalOpen, setIsCreateRoomModalOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await authAPI.logout();
+      router.push("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+      router.push("/auth/login");
+    }
   };
 
   const getStatusColor = (status: Friend["status"]) => {
@@ -113,6 +134,66 @@ export default function DashboardPage() {
     }
   };
 
+  // 새 채팅룸 생성 핸들러
+  const handleCreateRoom = async (roomData: {
+    name: string;
+    description: string;
+    isPrivate: boolean;
+  }) => {
+    try {
+      // 새 룸 ID 생성 (임시로 현재 시간 사용)
+      const newRoomId = Date.now().toString();
+
+      const newRoom: ChatRoom = {
+        id: newRoomId,
+        name: roomData.name,
+        description: roomData.description,
+        memberCount: 1, // 생성자만
+        lastMessage: undefined,
+        lastMessageTime: undefined,
+        isPrivate: roomData.isPrivate,
+      };
+
+      // 채팅룸 목록에 추가
+      setChatRooms((prev) => [...prev, newRoom]);
+
+      // TODO: 실제 API 호출
+      console.log("새 채팅룸 생성:", newRoom);
+
+      // 생성된 채팅룸으로 이동
+      router.push(`/chat/${newRoomId}`);
+    } catch (error) {
+      console.error("채팅룸 생성 실패:", error);
+      throw error; // 모달에서 에러 처리
+    }
+  };
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        setIsLoading(true);
+        const userData = await authAPI.getMe();
+        setCurrentUser(userData.user);
+      } catch (error: any) {
+        console.error("사용자 정보 가져오기 실패:", error);
+        setError(error.message);
+
+        if (error.response?.status === 401) {
+          router.push("/auth/login");
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [router]);
+
+  const handleDeletionSuccess = () => {
+    setIsDeleteModalOpen(false);
+    router.push("/");
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex">
       {/* 사이드바 */}
@@ -122,14 +203,14 @@ export default function DashboardPage() {
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
               <span className="text-white font-semibold">
-                {currentUser.username.charAt(0)}
+                {currentUser?.name.charAt(0)}
               </span>
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-gray-900">
-                {currentUser.username}
+                {currentUser?.name}
               </h3>
-              <p className="text-sm text-gray-500">{currentUser.email}</p>
+              <p className="text-sm text-gray-500">{currentUser?.email}</p>
             </div>
           </div>
         </div>
@@ -164,62 +245,66 @@ export default function DashboardPage() {
             <div className="p-4">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="font-semibold text-gray-900">채팅룸 목록</h4>
-                <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                <button
+                  onClick={() => setIsCreateRoomModalOpen(true)}
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                >
                   + 새 룸
                 </button>
               </div>
 
               <div className="space-y-2">
-                {mockChatRooms.map((room) => (
-                  <Link
-                    key={room.id}
-                    href={`/chat/${room.id}`}
-                    className="block p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <h5 className="font-medium text-gray-900">
-                            {room.name}
-                          </h5>
-                          {room.isPrivate && (
-                            <svg
-                              className="w-4 h-4 text-gray-400"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                              />
-                            </svg>
+                {chatRooms &&
+                  chatRooms.map((room) => (
+                    <Link
+                      key={room.id}
+                      href={`/chat/${room.id}`}
+                      className="block p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-200"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h5 className="font-medium text-gray-900">
+                              {room.name}
+                            </h5>
+                            {room.isPrivate && (
+                              <svg
+                                className="w-4 h-4 text-gray-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {room.description}
+                          </p>
+                          {room.lastMessage && (
+                            <p className="text-xs text-gray-600 mt-2 truncate">
+                              {room.lastMessage}
+                            </p>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {room.description}
-                        </p>
-                        {room.lastMessage && (
-                          <p className="text-xs text-gray-600 mt-2 truncate">
-                            {room.lastMessage}
-                          </p>
-                        )}
+                        <div className="text-right">
+                          <span className="text-xs text-gray-400">
+                            {room.memberCount}명
+                          </span>
+                          {room.lastMessageTime && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              {room.lastMessageTime}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs text-gray-400">
-                          {room.memberCount}명
-                        </span>
-                        {room.lastMessageTime && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            {room.lastMessageTime}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
               </div>
             </div>
           )}
@@ -287,6 +372,14 @@ export default function DashboardPage() {
             <button className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
               설정
             </button>
+
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              회원탈퇴
+            </button>
+
             <button
               onClick={handleLogout}
               className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -332,7 +425,7 @@ export default function DashboardPage() {
                   다양한 주제의 채팅룸에 참여해보세요
                 </p>
                 <div className="text-2xl font-bold text-blue-600">
-                  {mockChatRooms.length}
+                  {chatRooms.length}
                 </div>
                 <p className="text-xs text-gray-500">개의 활성 룸</p>
               </div>
@@ -353,6 +446,22 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* 모달들 */}
+      {isDeleteModalOpen && (
+        <DeleteAccountForm
+          onClose={() => setIsDeleteModalOpen(false)}
+          onSuccess={handleDeletionSuccess}
+        />
+      )}
+
+      {isCreateRoomModalOpen && (
+        <CreateRoomModal
+          isOpen={isCreateRoomModalOpen}
+          onClose={() => setIsCreateRoomModalOpen(false)}
+          onCreateRoom={handleCreateRoom}
+        />
+      )}
     </div>
   );
 }
